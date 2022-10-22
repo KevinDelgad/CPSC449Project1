@@ -134,7 +134,7 @@ async def create_game(data):
 
         # Create new game with 0 guesses
         query = "INSERT INTO game(guesses, gstate) VALUES(:guesses, :gstate)"
-        values = {"guesses": 0, "gstate": "In-progress"}
+        values = {"guesses": 6, "gstate": "In-progress"}
         cur = await db.execute(query=query, values=values)
 
         # Create new row into Games table which connect with the recently connected game
@@ -178,7 +178,7 @@ async def add_guess(data):
     isValidGuess = await db.fetch_one("SELECT * from valid_word where valword = :word;", values={"word":currGame["word"]})
     guessNum = await db.fetch_one("SELECT guesses from game where gameid = :gameid",values={"gameid":currGame["gameid"]})
     accuracy = ""
-    if(isValidGuess is not None and len(isValidGuess) >= 1 and guessNum[0] < 6):
+    if(isValidGuess is not None and len(isValidGuess) >= 1 and guessNum[0] > 0):
         try: 
             #make a dict mapping each character and its position from the answer
             answord = await db.fetch_one("SELECT answord FROM answer as a, games as g  where g.gameid = :gameid and g.answerid = a.answerid",values={"gameid":currGame["gameid"]})
@@ -202,23 +202,23 @@ async def add_guess(data):
             id_games = await db.execute(
                 """
                 UPDATE game set guesses = :guessNum where gameid = :gameid
-                """,values={"guessNum":(guessNum[0]+1),"gameid":currGame['gameid']}
+                """,values={"guessNum":(guessNum[0]-1),"gameid":currGame['gameid']}
             )
             #if after updating game number of guesses reaches max guesses then mark game as finished 
-            if(guessNum[0]+1 >= 6):
+            if(guessNum[0]-1 <= 0):
                 #update game status as finished
                 id_games = await db.execute(
                     """
                     UPDATE game set gstate = :status where gameid = :gameid
                     """,values={"status":"Finished","gameid":currGame['gameid']}
                 )
-                return currGame,202
+                return {"Message":"Ran out of guesses"},202
         except sqlite3.IntegrityError as e:
             abort(404, e)
     else:
         #should return msg saying invalid word?
         return{"Error":"Invalid Word"}
-    return {"guessedWord":currGame["word"], "Accuracy":accuracy},201
+    return {"guessedWord":currGame["word"], "Accuracy":accuracy, "Guesses Left":guessNum[0]-1},201
 
 @app.route("/games/<string:username>/all", methods=["GET"])
 async def all_games(username):
